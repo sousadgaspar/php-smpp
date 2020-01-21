@@ -23,7 +23,7 @@ require_once dirname(__FILE__).DIRECTORY_SEPARATOR.'sockettransport.class.php';
  * 
  * This license can be read at: http://www.opensource.org/licenses/lgpl-2.1.php
  */
-class SmppClient
+class SMPPClient
 {
 	// SMPP bind parameters
 	public static $system_type="WWW";
