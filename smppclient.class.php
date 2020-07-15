@@ -23,10 +23,10 @@ require_once dirname(__FILE__).DIRECTORY_SEPARATOR.'sockettransport.class.php';
  * 
  * This license can be read at: http://www.opensource.org/licenses/lgpl-2.1.php
  */
-class SMPPClient
+class SmppClient
 {
 	// SMPP bind parameters
-	public static $system_type="WEBBER";
+	public static $system_type="waau_novo";
 	public static $interface_version=0x34;
 	public static $addr_ton=0;
 	public static $addr_npi=0;
@@ -213,7 +213,9 @@ class SMPPClient
 	{
 		$pduBody = pack('a'.(strlen($messageid)+1).'cca'.(strlen($source->value)+1),$messageid,$source->ton,$source->npi,$source->value);
 		$reply = $this->sendCommand(SMPP::QUERY_SM, $pduBody);
-		if (!$reply || $reply->status != SMPP::ESME_ROK) return null;
+		//if (!$reply || $reply->status != SMPP::ESME_ROK) return null; old version
+		if (!$reply) return null; //promoplus version
+
 		
 		// Parse reply
 		$posId = strpos($reply->body,"\0",0);
@@ -223,7 +225,8 @@ class SMPPClient
 		$data['final_date'] = substr($reply->body,$posId,$posDate-$posId);
 		$data['final_date'] = $data['final_date'] ? $this->parseSmppTime(trim($data['final_date'])) : null;
 		$status = unpack("cmessage_state/cerror_code",substr($reply->body,$posDate+1));
-		return array_merge($data,$status);
+		$statusMessage = $this->getStatusMessage($status);
+		return array_merge($data,$status, $statusMessage);
 	}
 	
 	/**
@@ -278,16 +281,20 @@ class SMPPClient
 	 * @param string $validityPeriod (optional)
 	 * @return string message id
 	 */
-	public function sendSMS(SmppAddress $from, SmppAddress $to, $message, $tags=null, $dataCoding=SMPP::DATA_CODING_DEFAULT, $priority=0x00, $scheduleDeliveryTime=null, $validityPeriod=null)
+	public function sendSMS(SmppAddress $from, SmppAddress $to, $message, $tags=null, $dataCoding=SMPP::DATA_CODING_ISO8859_1, $priority=0x00, $scheduleDeliveryTime=null, $validityPeriod=null)
 	{
 		$msg_length = strlen($message);
 		
-		if ($msg_length>160 && $dataCoding != SMPP::DATA_CODING_UCS2 && $dataCoding != SMPP::DATA_CODING_DEFAULT) return false;
+		if ($msg_length>160 && $dataCoding != SMPP::DATA_CODING_UCS2 && $dataCoding != SMPP::DATA_CODING_ISO8859_1 && $dataCoding != SMPP::DATA_CODING_DEFAULT) return false;
 		
 		switch ($dataCoding) {
 			case SMPP::DATA_CODING_UCS2:
 				$singleSmsOctetLimit = 140; // in octets, 70 UCS-2 chars
 				$csmsSplit = 132; // There are 133 octets available, but this would split the UCS the middle so use 132 instead
+				break;
+			case SMPP::DATA_CODING_ISO8859_1:
+				$singleSmsOctetLimit = 160; // we send data in octets, but GSM 03.38 will be packed in septets (7-bit) by SMSC.
+				$csmsSplit = (self::$csms_method == SmppClient::CSMS_8BIT_UDH) ? 153 : 152; // send 152/153 chars in each SMS (SMSC will format data)
 				break;
 			case SMPP::DATA_CODING_DEFAULT:
 				$singleSmsOctetLimit = 160; // we send data in octets, but GSM 03.38 will be packed in septets (7-bit) by SMSC.
@@ -356,7 +363,7 @@ class SMPPClient
 	 * @param string $esmClass
 	 * @return string message id
 	 */
-	protected function submit_sm(SmppAddress $source, SmppAddress $destination, $short_message=null, $tags=null, $dataCoding=SMPP::DATA_CODING_DEFAULT, $priority=0x00, $scheduleDeliveryTime=null, $validityPeriod=null, $esmClass=null)
+	protected function submit_sm(SmppAddress $source, SmppAddress $destination, $short_message=null, $tags=null, $dataCoding=SMPP::DATA_CODING_ISO8859_1, $priority=0x00, $scheduleDeliveryTime=null, $validityPeriod=null, $esmClass=null)
 	{
 		if (is_null($esmClass)) $esmClass = self::$sms_esm_class;
 		
@@ -417,9 +424,10 @@ class SMPPClient
 	 * @param integer $split
 	 * @param integer $dataCoding (optional)
 	 */
-	protected function splitMessageString($message, $split, $dataCoding=SMPP::DATA_CODING_DEFAULT)
+	protected function splitMessageString($message, $split, $dataCoding=SMPP::DATA_CODING_ISO8859_1)
 	{
 		switch ($dataCoding) {
+			case SMPP::DATA_CODING_ISO8859_1:
 			case SMPP::DATA_CODING_DEFAULT:
 				$msg_length = strlen($message);
 				// Do we need to do php based split?
@@ -619,7 +627,8 @@ class SMPPClient
 		$response=$this->readPDU_resp($this->sequence_number, $pdu->id);
 		if ($response === false) throw new SmppException('Failed to read reply to command: 0x'.dechex($id));
 		
-		if ($response->status != SMPP::ESME_ROK) throw new SmppException(SMPP::getStatusMessage($response->status), $response->status);
+		//I'll use the response even though it can be a failure
+		//if ($response->status != SMPP::ESME_ROK) throw new SmppException(SMPP::getStatusMessage($response->status), $response->status);
 		
 		$this->sequence_number++;
 		
