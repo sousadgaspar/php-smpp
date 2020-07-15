@@ -225,8 +225,8 @@ class SmppClient
 		$data['final_date'] = substr($reply->body,$posId,$posDate-$posId);
 		$data['final_date'] = $data['final_date'] ? $this->parseSmppTime(trim($data['final_date'])) : null;
 		$status = unpack("cmessage_state/cerror_code",substr($reply->body,$posDate+1));
-		$statusMessage = $this->getStatusMessage($status);
-		return array_merge($data,$status, $statusMessage);
+		data['status_message'] = $this->getStatusMessage($status);
+		return array_merge($data,$status);
 	}
 	
 	/**
