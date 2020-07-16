@@ -222,7 +222,7 @@ class SmppClient
 		$posDate = strpos($reply->body,"\0",$posId+1);
 		$data = array();
         
-        die(print_r($reply));
+        \Log::info($reply);
 		$data['message_id'] = substr($reply->body,0,$posId);
 		$data['final_date'] = substr($reply->body,$posId,$posDate-$posId);
 		$data['final_date'] = $data['final_date'] ? $this->parseSmppTime(trim($data['final_date'])) : null;
